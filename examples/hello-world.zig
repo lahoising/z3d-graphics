@@ -1,5 +1,5 @@
 const std = @import("std");
-const graphics = @import("graphics");
+const graphics = @import("z3d-graphics");
 
 const WindowManager = graphics.WindowManager;
 const Window = graphics.Window;

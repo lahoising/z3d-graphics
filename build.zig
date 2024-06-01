@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addModule("graphics", .{
+    const lib = b.addModule("z3d-graphics", .{
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
         .root_source_file = b.path("src/root.zig"),
@@ -38,12 +38,12 @@ pub fn build(b: *std.Build) void {
     lib.addImport("zgl", zgl.module("zgl"));
 
     const sample = b.addExecutable(.{
-        .name = "graphics",
+        .name = "z3d-graphics-hello-world",
         .root_source_file = b.path("examples/hello-world.zig"),
         .target = target,
         .optimize = optimize,
     });
-    sample.root_module.addImport("graphics", lib);
+    sample.root_module.addImport("z3d-graphics", lib);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
