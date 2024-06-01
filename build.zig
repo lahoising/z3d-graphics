@@ -23,11 +23,19 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // *** GLFW
     const glfw = b.dependency("glfw", .{
         .target = target,
         .optimize = optimize,
     });
     lib.linkLibrary(glfw.artifact("glfw"));
+
+    // *** OpenGL bindings
+    const zgl = b.dependency("zgl", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    lib.addImport("zgl", zgl.module("zgl"));
 
     const sample = b.addExecutable(.{
         .name = "graphics",

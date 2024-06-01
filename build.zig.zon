@@ -10,8 +10,12 @@
         //"README.md",
     },
     .dependencies = .{
-      .glfw = .{
-        .path = "deps/glfw/",
-      },
+        .glfw = .{
+            .path = "deps/glfw/",
+        },
+        .zgl = .{
+            .url = "https://github.com/ziglibs/zgl/archive/291aad12f3bdc376d155d93b472ed1965d442c29.tar.gz",
+            .hash = "1220bac3cda2e1f36cfe323df5db3ef6587188ad166c79ff01f8aa7bdb1a96cf20c2",
+        },
     },
 }
