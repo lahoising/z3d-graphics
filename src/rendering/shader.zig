@@ -52,6 +52,13 @@ pub const Shader = struct {
         gl.deleteProgram(self.program);
     }
 
+    pub fn setUniform(self: Shader, uniformType: UniformType, name: [:0]const u8, data: UniformType.Data(uniformType)) void {
+        const location = gl.getUniformLocation(self.program, name);
+        switch (uniformType) {
+            UniformType.MAT4 => gl.uniformMatrix4fv(location, false, &.{data}),
+        }
+    }
+
     fn checkShaderCompilationError(comptime allocator: std.mem.Allocator, shader: gl.Shader, shaderType: ShaderType) !bool {
         if (gl.getShader(shader, gl.ShaderParameter.compile_status) != 0) {
             return false;
@@ -117,5 +124,15 @@ const ShaderSource = struct {
                 try self.fragmentShaderSource.append('\n');
             }
         }
+    }
+};
+
+pub const UniformType = enum {
+    MAT4,
+
+    pub fn Data(comptime T: UniformType) type {
+        return switch (T) {
+            UniformType.MAT4 => [4][4]f32,
+        };
     }
 };

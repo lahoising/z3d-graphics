@@ -9,6 +9,7 @@ const glBackend = @import("opengl/renderer.zig");
 pub const VertexBuffer = vertexBufferModule.VertexBuffer;
 pub const IndexBuffer = indexBufferModule.IndexBuffer;
 pub const Shader = shaderModule.Shader;
+pub const UniformType = shaderModule.UniformType;
 pub const Mesh = meshModule.Mesh;
 
 const GlRenderer = glBackend.GlRenderer;

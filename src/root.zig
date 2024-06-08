@@ -12,3 +12,4 @@ pub const VertexBuffer = renderer.VertexBuffer;
 pub const IndexBuffer = renderer.IndexBuffer;
 pub const Shader = renderer.Shader;
 pub const Mesh = renderer.Mesh;
+pub const UniformType = renderer.UniformType;
