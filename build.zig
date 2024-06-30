@@ -24,18 +24,25 @@ pub fn build(b: *std.Build) void {
     });
 
     // *** GLFW
-    const glfw = b.dependency("glfw", .{
+    const zglfw = b.dependency("zglfw", .{
         .target = target,
         .optimize = optimize,
     });
-    lib.linkLibrary(glfw.artifact("glfw"));
+    lib.addImport("zglfw", zglfw.module("root"));
+    lib.linkLibrary(zglfw.artifact("glfw"));
 
     // *** OpenGL bindings
-    const zgl = b.dependency("zgl", .{
-        .target = target,
-        .optimize = optimize,
+    const zopengl = b.dependency("zopengl", .{});
+    lib.addImport("zopengl", zopengl.module("root"));
+
+    // *** ImGui
+    const zgui = b.dependency("zgui", .{
+        .shared = false,
+        .with_implot = true,
+        .backend = .glfw_opengl3,
     });
-    lib.addImport("zgl", zgl.module("zgl"));
+    lib.addImport("zgui", zgui.module("root"));
+    lib.linkLibrary(zgui.artifact("imgui"));
 
     const sample = b.addExecutable(.{
         .name = "z3d-graphics-hello-world",
@@ -44,6 +51,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     sample.root_module.addImport("z3d-graphics", lib);
+    sample.root_module.addImport("zgui", zgui.module("root"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

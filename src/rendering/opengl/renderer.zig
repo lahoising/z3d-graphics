@@ -1,5 +1,6 @@
-const gl = @import("zgl");
+const zopengl = @import("zopengl");
 const renderer = @import("../renderer.zig");
+const gl = zopengl.wrapper;
 
 const Renderer = renderer.Renderer;
 const VertexBuffer = renderer.VertexBuffer;
@@ -31,20 +32,20 @@ pub const GlRenderer = struct {
 
     pub fn renderWithPipeline(self: *GlRenderer, shader: Shader, callback: RenderWithPipelineCallback) void {
         gl.useProgram(shader.program);
-        defer gl.useProgram(gl.Program.invalid);
+        defer gl.useProgram(gl.Program{ .name = 0 });
         callback(@ptrCast(self), shader);
     }
 
     pub fn renderIndexedVertices(_: GlRenderer, comptime VertexType: type, vertexBuffer: VertexBuffer(VertexType), indexBuffer: IndexBuffer) void {
         gl.bindVertexArray(vertexBuffer.vertexArray);
-        defer gl.bindVertexArray(gl.VertexArray.invalid);
+        defer gl.bindVertexArray(gl.VertexArrayObject{ .name = 0 });
 
-        gl.bindBuffer(vertexBuffer.buffer, gl.BufferTarget.array_buffer);
-        defer gl.bindBuffer(gl.Buffer.invalid, gl.BufferTarget.array_buffer);
+        gl.bindBuffer(gl.BufferTarget.array_buffer, vertexBuffer.buffer);
+        defer gl.bindBuffer(gl.BufferTarget.array_buffer, gl.Buffer{ .name = 0 });
 
-        gl.bindBuffer(indexBuffer.buffer, gl.BufferTarget.element_array_buffer);
-        defer gl.bindBuffer(gl.Buffer.invalid, gl.BufferTarget.element_array_buffer);
+        gl.bindBuffer(gl.BufferTarget.element_array_buffer, indexBuffer.buffer);
+        defer gl.bindBuffer(gl.BufferTarget.element_array_buffer, gl.Buffer{ .name = 0 });
 
-        gl.drawElements(gl.PrimitiveType.triangles, indexBuffer.indices.len, gl.ElementType.unsigned_byte, 0);
+        zopengl.bindings.drawElements(gl.TRIANGLES, @intCast(indexBuffer.indices.len), gl.UNSIGNED_BYTE, null);
     }
 };

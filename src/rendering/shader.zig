@@ -1,5 +1,6 @@
 const std = @import("std");
-const gl = @import("zgl");
+const zopengl = @import("zopengl");
+const gl = zopengl.wrapper;
 
 pub const ShaderCompilationError = error{
     FailedToCompileVertexShader,
@@ -18,7 +19,7 @@ pub const Shader = struct {
 
         const vertexShader = gl.createShader(gl.ShaderType.vertex);
         defer gl.deleteShader(vertexShader);
-        gl.shaderSource(vertexShader, 1, (&shaderSource.vertexShaderSource.items)[0..1]);
+        gl.shaderSource(vertexShader, &.{@ptrCast(shaderSource.vertexShaderSource.items.ptr)}, &.{@intCast(shaderSource.vertexShaderSource.items.len)});
         gl.compileShader(vertexShader);
         if (try checkShaderCompilationError(allocator, vertexShader, ShaderType.VERTEX)) {
             return ShaderCompilationError.FailedToCompileVertexShader;
@@ -26,18 +27,18 @@ pub const Shader = struct {
 
         const fragmentShader = gl.createShader(gl.ShaderType.fragment);
         defer gl.deleteShader(fragmentShader);
-        gl.shaderSource(fragmentShader, 1, (&shaderSource.fragmentShaderSource.items)[0..1]);
+        gl.shaderSource(fragmentShader, &.{@ptrCast(shaderSource.fragmentShaderSource.items.ptr)}, &.{@intCast(shaderSource.fragmentShaderSource.items.len)});
         gl.compileShader(fragmentShader);
         if (try checkShaderCompilationError(allocator, fragmentShader, ShaderType.FRAGMENT)) {
             return ShaderCompilationError.FailedToCompileFragmentShader;
         }
 
         const program = gl.createProgram();
-        errdefer gl.deleteProgram(program);
+        errdefer zopengl.bindings.deleteProgram(program.name);
         gl.attachShader(program, vertexShader);
-        defer gl.detachShader(program, vertexShader);
+        defer zopengl.bindings.detachShader(program.name, vertexShader.name);
         gl.attachShader(program, fragmentShader);
-        defer gl.detachShader(program, fragmentShader);
+        defer zopengl.bindings.detachShader(program.name, fragmentShader.name);
         gl.linkProgram(program);
         if (try checkProgramLinkingError(allocator, program)) {
             return ShaderCompilationError.FailedToLinkProgram;
@@ -49,33 +50,42 @@ pub const Shader = struct {
     }
 
     pub fn destroy(self: *Shader) void {
-        gl.deleteProgram(self.program);
+        zopengl.bindings.deleteProgram(self.program.name);
+        self.program = undefined;
     }
 
-    pub fn setUniform(self: Shader, uniformType: UniformType, name: [:0]const u8, data: UniformType.Data(uniformType)) void {
-        const location = gl.getUniformLocation(self.program, name);
+    pub fn setUniform(self: Shader, uniformType: UniformType, name: [:0]const u8, data: UniformType.Data(uniformType)) !void {
+        const location = gl.getUniformLocation(self.program, name) orelse {
+            return error.UnableToFindUniformLocation;
+        };
         switch (uniformType) {
-            UniformType.MAT4 => gl.uniformMatrix4fv(location, false, &.{data}),
+            UniformType.MAT4 => gl.uniformMatrix4fv(location, 1, @intFromBool(false), uniformType.ptr(&data)),
         }
     }
 
     fn checkShaderCompilationError(comptime allocator: std.mem.Allocator, shader: gl.Shader, shaderType: ShaderType) !bool {
-        if (gl.getShader(shader, gl.ShaderParameter.compile_status) != 0) {
+        if (gl.getShaderiv(shader, gl.ShaderParameter.compile_status) != 0) {
             return false;
         }
-        const errorReason = try gl.getShaderInfoLog(shader, allocator);
-        defer allocator.free(errorReason);
-        std.debug.print("Error compiling {s} shader: {s}\n", .{ @tagName(shaderType), errorReason });
+        const bufferLength: usize = @intCast(gl.getShaderiv(shader, gl.ShaderParameter.info_log_length));
+        var buffer = try std.ArrayList(u8).initCapacity(allocator, bufferLength);
+        defer buffer.deinit();
+        try buffer.resize(bufferLength);
+        const errorReason = gl.getShaderInfoLog(shader, buffer.items);
+        std.debug.print("Error compiling {s} shader: {s}\n", .{ @tagName(shaderType), errorReason.? });
         return true;
     }
 
     fn checkProgramLinkingError(comptime allocator: std.mem.Allocator, program: gl.Program) !bool {
-        if (gl.getProgram(program, gl.ProgramParameter.link_status) != 0) {
+        if (gl.getProgramiv(program, @enumFromInt(gl.LINK_STATUS)) != 0) {
             return false;
         }
-        const errorReason = try gl.getProgramInfoLog(program, allocator);
-        defer allocator.free(errorReason);
-        std.debug.print("Error linking GL program: {s}", .{errorReason});
+        const bufferLength: usize = @intCast(gl.getProgramiv(program, @enumFromInt(gl.INFO_LOG_LENGTH)));
+        var buffer = try std.ArrayList(u8).initCapacity(allocator, bufferLength);
+        defer buffer.deinit();
+        try buffer.resize(bufferLength);
+        const errorReason = gl.getProgramInfoLog(program, buffer.items);
+        std.debug.print("Error linking GL program: {s}", .{errorReason.?});
         return true;
     }
 };
@@ -133,6 +143,21 @@ pub const UniformType = enum {
     pub fn Data(comptime T: UniformType) type {
         return switch (T) {
             UniformType.MAT4 => [4][4]f32,
+        };
+    }
+
+    pub fn PtrType(comptime T: UniformType) type {
+        return switch (T) {
+            UniformType.MAT4 => [*]const f32,
+        };
+    }
+
+    pub fn ptr(self: UniformType, data: *const Data(self)) PtrType(self) {
+        return switch (self) {
+            UniformType.MAT4 => {
+                const opaqueData: *const Data(UniformType.MAT4) = data;
+                return @ptrCast(opaqueData[0..].ptr);
+            },
         };
     }
 };

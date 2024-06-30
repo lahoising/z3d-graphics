@@ -1,8 +1,5 @@
 const std = @import("std");
-const glfw = @cImport({
-    @cInclude("GLFW/glfw3.h");
-});
-const gl = @import("zgl");
+const zglfw = @import("zglfw");
 
 const input = @import("input.zig");
 const Key = input.Key;
@@ -13,7 +10,7 @@ const Renderer = @import("../rendering/renderer.zig").Renderer;
 pub fn Window(comptime renderingBackend: Renderer.Backend) type {
     return struct {
         const Self = @This();
-        windowHandle: *glfw.GLFWwindow,
+        windowHandle: *zglfw.Window,
 
         const KeyInputCallback = fn (*Self, Key, KeyModifier, KeyAction) void;
         fn RenderFrameCallback(comptime Context: type) type {
@@ -33,35 +30,30 @@ pub fn Window(comptime renderingBackend: Renderer.Backend) type {
         }
 
         pub fn close(self: Self) void {
-            glfw.glfwDestroyWindow(self.windowHandle);
+            self.windowHandle.destroy();
         }
 
         pub fn closeRequested(self: Self) bool {
-            return glfw.glfwWindowShouldClose(self.windowHandle) != 0;
+            return self.windowHandle.shouldClose();
         }
 
         pub fn setKeyInputCallback(self: *Self, callback: KeyInputCallback) !void {
-            glfw.glfwSetWindowUserPointer(self.windowHandle, self);
+            self.windowHandle.setUserPointer(self);
             const Handler = struct {
-                fn onKeyInput(window: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
+                fn onKeyInput(window: *zglfw.Window, key: zglfw.Key, scancode: i32, action: zglfw.Action, mods: zglfw.Mods) callconv(.C) void {
                     _ = scancode;
-                    if (window == null) {
-                        std.debug.print("no window found\n", .{});
-                        return;
-                    }
                     const convertedKey = input.convertBackendKeyToKey(key);
                     const convertedAction = input.convertBackendKeyActionToKeyAction(action);
                     const convertedMod = input.convertBackendKeyModifierToKeyModifier(mods);
-                    const abstractedWindow = @as(*Self, @ptrFromInt(@intFromPtr(glfw.glfwGetWindowUserPointer(window).?)));
+                    const abstractedWindow = window.getUserPointer(Self).?;
                     callback(abstractedWindow, convertedKey, convertedMod, convertedAction);
                 }
             };
-            _ = glfw.glfwSetKeyCallback(self.windowHandle, Handler.onKeyInput);
+            _ = self.windowHandle.setKeyCallback(Handler.onKeyInput);
         }
 
         pub fn renderFrame(self: *Self, context: anytype, comptime callback: RenderFrameCallback(@TypeOf(context))) void {
-            glfw.glfwMakeContextCurrent(self.windowHandle);
-            defer glfw.glfwMakeContextCurrent(null);
+            zglfw.makeContextCurrent(self.windowHandle);
 
             var renderer = Renderer.create(renderingBackend);
             const Context = @TypeOf(context);
@@ -75,8 +67,7 @@ pub fn Window(comptime renderingBackend: Renderer.Backend) type {
         pub fn process(self: *Self, context: anytype, comptime callback: ProcessCallback(@TypeOf(context))) !void {
             const Context = @TypeOf(context);
 
-            glfw.glfwMakeContextCurrent(self.windowHandle);
-            defer glfw.glfwMakeContextCurrent(null);
+            zglfw.makeContextCurrent(self.windowHandle);
 
             if (Context == void) {
                 try callback(self);
@@ -86,24 +77,22 @@ pub fn Window(comptime renderingBackend: Renderer.Backend) type {
         }
 
         pub fn getFrameSize(self: Self) std.meta.Tuple(&.{ u16, u16 }) {
-            var width: c_int = 0;
-            var height: c_int = 0;
-            glfw.glfwGetFramebufferSize(self.windowHandle, &width, &height);
-            return .{ @intCast(width), @intCast(height) };
+            const size = self.windowHandle.getFramebufferSize();
+            return .{ @intCast(size[0]), @intCast(size[1]) };
         }
 
         pub fn swapBuffer(self: Self) void {
-            glfw.glfwSwapBuffers(self.windowHandle);
+            self.windowHandle.swapBuffers();
         }
 
         pub fn enableVSync(self: Self, enable: bool) void {
-            const originalContext = glfw.glfwGetCurrentContext();
-            glfw.glfwMakeContextCurrent(self.windowHandle);
+            const originalContext = zglfw.getCurrentContext();
+            zglfw.makeContextCurrent(self.windowHandle);
 
-            const interval: c_int = if (enable) 1 else 0;
-            glfw.glfwSwapInterval(interval);
+            const interval: i32 = if (enable) 1 else 0;
+            zglfw.swapInterval(interval);
 
-            glfw.glfwMakeContextCurrent(originalContext);
+            zglfw.makeContextCurrent(originalContext);
         }
     };
 }

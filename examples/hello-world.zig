@@ -1,5 +1,6 @@
 const std = @import("std");
 const z3dg = @import("z3d-graphics");
+const zgui = @import("zgui");
 
 const Renderer = z3dg.Renderer;
 const RenderingBackend = Renderer.Backend.OpenGL;
@@ -21,6 +22,7 @@ pub const State = struct {
     clearColor: Vec4,
     position: Vec3,
     rotation: Quat,
+    demo: bool,
 
     pub fn destroy(self: *State) void {
         self.mesh.destroy();
@@ -35,6 +37,7 @@ var state = State{
     .clearColor = Vec4{ 0.0, 0.0, 0.0, 1.0 },
     .position = Vec3{ 0.0, 0.0, 0.0 },
     .rotation = Quat.rotationAroundZ(std.math.pi / 4.0),
+    .demo = true,
 };
 
 pub fn main() !void {
@@ -143,13 +146,21 @@ fn render(window: *Window, renderer: *Renderer) void {
     renderer.setViewport(0, 0, frameSize[0], frameSize[1]);
     renderer.clear(Renderer.ClearOptions.all());
     renderer.renderWithPipeline(state.shader, renderWithPipeline);
+
+    zgui.backend.newFrame(frameSize[0], frameSize[1]);
+    {
+        zgui.showDemoWindow(&state.demo);
+    }
+    zgui.backend.draw();
 }
 
 fn renderWithPipeline(renderer: *Renderer, shader: Shader) void {
     const transform = Mat4x4.identity()
         .rotate(state.rotation)
         .translate(state.position);
-    shader.setUniform(UniformType.MAT4, "transform", transform.data);
+    shader.setUniform(UniformType.MAT4, "transform", transform.data) catch |err| {
+        std.debug.print("Error when setting uniform: {s}\n", .{@errorName(err)});
+    };
     renderer.renderMesh(Vertex, state.mesh);
 }
 

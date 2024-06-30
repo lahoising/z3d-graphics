@@ -1,5 +1,6 @@
 const std = @import("std");
-const gl = @import("zgl");
+const zopengl = @import("zopengl");
+const gl = zopengl.wrapper;
 
 pub fn VertexBuffer(comptime Vertex: type) type {
     const typeInfo = @typeInfo(Vertex);
@@ -11,17 +12,19 @@ pub fn VertexBuffer(comptime Vertex: type) type {
 
         data: []Vertex,
         buffer: gl.Buffer,
-        vertexArray: gl.VertexArray,
+        vertexArray: gl.VertexArrayObject,
 
         pub fn create(data: []Vertex) !Self {
-            const buffer = gl.Buffer.gen();
-            gl.bindBuffer(buffer, gl.BufferTarget.array_buffer);
-            defer gl.bindBuffer(gl.Buffer.invalid, gl.BufferTarget.array_buffer);
-            gl.bufferData(gl.BufferTarget.array_buffer, Vertex, data, gl.BufferUsage.static_draw);
+            var buffer: gl.Buffer = undefined;
+            gl.genBuffer(&buffer);
+            gl.bindBuffer(gl.BufferTarget.array_buffer, buffer);
+            defer gl.bindBuffer(gl.BufferTarget.array_buffer, gl.Buffer{ .name = 0 });
+            gl.bufferData(gl.BufferTarget.array_buffer, @sizeOf(Vertex) * data.len, @ptrCast(data.ptr), gl.BufferUsage.static_draw);
 
-            const vertexArray = gl.VertexArray.gen();
+            var vertexArray: gl.VertexArrayObject = undefined;
+            gl.genVertexArray(&vertexArray);
             gl.bindVertexArray(vertexArray);
-            defer gl.bindVertexArray(gl.VertexArray.invalid);
+            defer gl.bindVertexArray(gl.VertexArrayObject{ .name = 0 });
             const vertexBuffer = Self{
                 .data = data,
                 .buffer = buffer,
@@ -30,9 +33,9 @@ pub fn VertexBuffer(comptime Vertex: type) type {
 
             var offset: usize = 0;
             for (fields, 0..) |fieldInfo, i| {
-                const idx: u32 = @intCast(i);
+                const idx: gl.VertexAttribLocation = gl.VertexAttribLocation{ .location = @intCast(i) };
                 gl.enableVertexAttribArray(idx);
-                gl.vertexAttribPointer(idx, fieldInfo.count, fieldInfo.type, false, @sizeOf(Vertex), offset);
+                gl.vertexAttribPointer(idx, fieldInfo.count, fieldInfo.type, @intFromBool(false), @sizeOf(Vertex), offset);
                 offset += fieldInfo.size;
             }
 
@@ -40,9 +43,9 @@ pub fn VertexBuffer(comptime Vertex: type) type {
         }
 
         pub fn destroy(self: *Self) void {
-            gl.deleteVertexArray(self.vertexArray);
+            gl.deleteVertexArrays(&.{self.vertexArray});
             self.vertexArray = undefined;
-            gl.deleteBuffer(self.buffer);
+            zopengl.bindings.deleteBuffers(1, &self.buffer.name);
             self.buffer = undefined;
             self.data = undefined;
         }
@@ -52,7 +55,7 @@ pub fn VertexBuffer(comptime Vertex: type) type {
 const FieldInfo = struct {
     size: usize,
     count: u32,
-    type: gl.Type,
+    type: gl.VertexAttribType,
 
     fn create(comptime T: type) !FieldInfo {
         const typeInfo = @typeInfo(T);
@@ -66,13 +69,13 @@ const FieldInfo = struct {
                 return FieldInfo{
                     .size = info.len * @sizeOf(f32),
                     .count = info.len,
-                    .type = gl.Type.float,
+                    .type = gl.VertexAttribType.float,
                 };
             },
             .Float => FieldInfo{
                 .size = @sizeOf(f32),
                 .count = 1,
-                .type = gl.Type.float,
+                .type = gl.VertexAttribType.float,
             },
             else => error.InvalidFieldType,
         };

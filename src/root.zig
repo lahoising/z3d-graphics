@@ -1,10 +1,11 @@
 const std = @import("std");
 const testing = std.testing;
 const input = @import("windowing/input.zig");
-const glfw = @cImport({
-    @cInclude("GLFW/glfw3.h");
-});
-const gl = @import("zgl");
+const zglfw = @import("zglfw");
+const zopengl = @import("zopengl");
+const gl = zopengl.wrapper;
+const zgui = @import("zgui");
+
 pub const rendering = @import("rendering/renderer.zig");
 pub const windows = @import("windowing/windows.zig");
 pub const Window = windows.Window;
@@ -26,28 +27,21 @@ pub fn Z3DG(comptime renderingBackend: Renderer.Backend) type {
         mainWindow: Window(renderingBackend),
 
         pub fn init(self: *Self) !void {
-            _ = glfw.glfwSetErrorCallback(glfw_error_callback);
+            try zglfw.init();
+            errdefer zglfw.terminate();
 
-            const initOutcome = glfw.glfwInit();
-            if (initOutcome != 1) {
-                std.debug.print("Window Manager failed to init. Error code: {d}\n", .{initOutcome});
-                return error.InitError;
-            }
-            errdefer glfw.glfwTerminate();
+            zglfw.windowHint(zglfw.WindowHint.context_version_major, 4);
+            zglfw.windowHint(zglfw.WindowHint.context_version_minor, 5);
+            zglfw.windowHintTyped(zglfw.WindowHint.opengl_profile, zglfw.OpenGLProfile.opengl_core_profile);
 
-            glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 4);
-            glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 5);
-            glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
+            const windowHandle = try zglfw.Window.create(800, 600, "Title", null);
 
-            const windowHandle = glfw.glfwCreateWindow(800, 600, "Title", null, null) orelse return error.UnableToCreateWindow;
-
-            glfw.glfwMakeContextCurrent(windowHandle);
-            defer glfw.glfwMakeContextCurrent(null);
+            zglfw.makeContextCurrent(windowHandle);
 
             switch (renderingBackend) {
                 Renderer.Backend.OpenGL => {
-                    gl.loadExtensions(self, glExtensionsLoader) catch return error.UnableToLoadGlExtensions;
-                    gl.debugMessageCallback(self, debugMessageCallback);
+                    zopengl.loadCoreProfile(glExtensionsLoader, 4, 5) catch return error.UnableToLoadGlExtensions;
+                    gl.debugMessageCallback(debugMessageCallback, self);
                 },
             }
 
@@ -57,19 +51,23 @@ pub fn Z3DG(comptime renderingBackend: Renderer.Backend) type {
             errdefer window.close();
 
             self.mainWindow = window;
+
+            const allocator = std.heap.page_allocator;
+            zgui.init(allocator);
+            zgui.backend.init(windowHandle);
         }
 
         pub fn terminate(self: *Self) void {
             self.mainWindow.close();
-            glfw.glfwTerminate();
+            zglfw.terminate();
         }
 
         pub fn pollEvents(_: *Self) void {
-            glfw.glfwPollEvents();
+            zglfw.pollEvents();
         }
 
         pub fn createWindow(_: *Self, width: u16, height: u16, title: []const u8) !Window {
-            const windowHandle = glfw.glfwCreateWindow(width, height, title.ptr, null, null) orelse return error.UnableToCreateWindow;
+            const windowHandle = try zglfw.Window.create(width, height, title.ptr, null);
             var window = Window{
                 .windowHandle = windowHandle,
             };
@@ -93,12 +91,12 @@ pub fn Z3DG(comptime renderingBackend: Renderer.Backend) type {
         }
 
         // Abstract this once we support other backends
-        fn glExtensionsLoader(_: *Self, ext: [:0]const u8) ?gl.binding.FunctionPointer {
-            return glfw.glfwGetProcAddress(ext);
+        fn glExtensionsLoader(ext: [:0]const u8) ?*const anyopaque {
+            return zglfw.getProcAddress(ext);
         }
 
-        fn debugMessageCallback(_: *Self, source: gl.DebugSource, msgType: gl.DebugMessageType, id: usize, severity: gl.DebugSeverity, message: []const u8) void {
-            std.debug.print("[{}] [{}] [{}] [{}] {s}\n", .{ source, msgType, id, severity, message });
+        fn debugMessageCallback(source: gl.DebugSource, msgType: gl.DebugType, id: c_uint, severity: gl.DebugSeverity, messageLength: u32, message: [*]const u8, _: ?*const anyopaque) void {
+            std.debug.print("[{}] [{}] [{}] [{}] {s}\n", .{ source, msgType, id, severity, message[0..messageLength] });
         }
 
         fn glfw_error_callback(code: i32, description: [*c]const u8) callconv(.C) void {
