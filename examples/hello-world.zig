@@ -1,17 +1,157 @@
 const std = @import("std");
-const graphics = @import("z3d-graphics");
+const z3dg = @import("z3d-graphics");
 
-const WindowManager = graphics.WindowManager;
-const Window = graphics.Window;
-const Key = graphics.Key;
-const KeyModifier = graphics.KeyModifier;
-const KeyAction = graphics.KeyAction;
-const Renderer = graphics.Renderer;
-const VertexBuffer = graphics.VertexBuffer;
-const IndexBuffer = graphics.IndexBuffer;
-const Shader = graphics.Shader;
-const Mesh = graphics.Mesh;
-const UniformType = graphics.UniformType;
+const Renderer = z3dg.Renderer;
+const RenderingBackend = Renderer.Backend.OpenGL;
+const Z3DG = z3dg.Z3DG(RenderingBackend);
+const Window = z3dg.Window(RenderingBackend);
+const Key = z3dg.Key;
+const KeyModifier = z3dg.KeyModifier;
+const KeyAction = z3dg.KeyAction;
+const VertexBuffer = z3dg.VertexBuffer;
+const IndexBuffer = z3dg.IndexBuffer;
+const Shader = z3dg.Shader;
+const Mesh = z3dg.Mesh;
+const UniformType = z3dg.UniformType;
+
+pub const State = struct {
+    running: bool,
+    mesh: Mesh(Vertex),
+    shader: Shader,
+    clearColor: Vec4,
+    position: Vec3,
+    rotation: Quat,
+
+    pub fn destroy(self: *State) void {
+        self.mesh.destroy();
+        self.shader.destroy();
+    }
+};
+
+var state = State{
+    .running = false,
+    .mesh = undefined,
+    .shader = undefined,
+    .clearColor = Vec4{ 0.0, 0.0, 0.0, 1.0 },
+    .position = Vec3{ 0.0, 0.0, 0.0 },
+    .rotation = Quat.rotationAroundZ(std.math.pi / 4.0),
+};
+
+pub fn main() !void {
+    var runtime = Z3DG.singleton();
+    try runtime.init();
+    defer runtime.terminate();
+
+    try runtime.mainWindow.process(@as(void, undefined), setup);
+    defer state.destroy();
+
+    Mat4x4.identity()
+        .rotate(state.rotation)
+        .translate(state.position)
+        .print();
+
+    state.running = true;
+    while (state.running) {
+        runtime.pollEvents();
+        if (runtime.mainWindow.closeRequested()) {
+            state.running = false;
+        }
+        update();
+
+        runtime.mainWindow.renderFrame(@as(void, undefined), render);
+        runtime.mainWindow.swapBuffer();
+    }
+}
+
+fn setup(window: *Window) !void {
+    try window.setKeyInputCallback(onKeyEvent);
+    window.enableVSync(true);
+
+    var data: [3]Vertex = [_]Vertex{
+        .{
+            .position = Vec3{ -0.5, -0.5, 0.0 },
+            .color = Vec4{ 1.0, 0.0, 0.0, 1.0 },
+        },
+        .{
+            .position = Vec3{ 0.5, -0.5, 0.0 },
+            .color = Vec4{ 0.0, 1.0, 0.0, 1.0 },
+        },
+        .{
+            .position = Vec3{ 0.0, 0.5, 0.0 },
+            .color = Vec4{ 0.0, 0.0, 1.0, 1.0 },
+        },
+    };
+    var vertexBuffer = try VertexBuffer(Vertex).create(&data);
+    errdefer vertexBuffer.destroy();
+
+    const shaderSourceRelativePath = "examples/resources/hello-world.shader";
+    var out_buffer: [1024]u8 = undefined;
+    const shaderSourceAbsolutePath = try std.fs.cwd().realpath(shaderSourceRelativePath, &out_buffer);
+    state.shader = try Shader.create(shaderSourceAbsolutePath);
+    errdefer state.shader.destroy();
+
+    var indices = [_]u8{
+        0, 1, 2,
+    };
+    var indexBuffer = IndexBuffer.create(&indices);
+    errdefer indexBuffer.destroy();
+
+    state.mesh = Mesh(Vertex).create(vertexBuffer, indexBuffer);
+    errdefer state.mesh.destroy();
+}
+
+fn onKeyEvent(_: *Window, key: Key, _: KeyModifier, action: KeyAction) void {
+    const escapePressed = key == Key.ESCAPE and action == KeyAction.PRESSED;
+    if (escapePressed) {
+        state.running = false;
+    }
+
+    const speed: f32 = 0.1;
+    if (action == KeyAction.PRESSED) {
+        if (key == Key.Q) {
+            state.clearColor[0] = @min(state.clearColor[0] + 0.1, 1.0);
+        } else if (key == Key.A) {
+            state.clearColor[0] = @max(state.clearColor[0] - 0.1, 0.0);
+        } else if (key == Key.W) {
+            state.clearColor[1] = @min(state.clearColor[1] + 0.1, 1.0);
+        } else if (key == Key.S) {
+            state.clearColor[1] = @max(state.clearColor[1] - 0.1, 0.0);
+        } else if (key == Key.E) {
+            state.clearColor[2] = @min(state.clearColor[2] + 0.1, 1.0);
+        } else if (key == Key.D) {
+            state.clearColor[2] = @max(state.clearColor[2] - 0.1, 0.0);
+        } else if (key == Key.UP) {
+            state.position[1] += speed;
+        } else if (key == Key.DOWN) {
+            state.position[1] -= speed;
+        } else if (key == Key.RIGHT) {
+            state.position[0] += speed;
+        } else if (key == Key.LEFT) {
+            state.position[0] -= speed;
+        }
+    }
+}
+
+fn update() void {
+    const rotationalSpeed: f32 = std.math.pi / 120.0;
+    state.rotation = Quat.rotationAroundZ(rotationalSpeed).multiply(state.rotation);
+}
+
+fn render(window: *Window, renderer: *Renderer) void {
+    renderer.setClearColor(state.clearColor);
+    const frameSize = window.getFrameSize();
+    renderer.setViewport(0, 0, frameSize[0], frameSize[1]);
+    renderer.clear(Renderer.ClearOptions.all());
+    renderer.renderWithPipeline(state.shader, renderWithPipeline);
+}
+
+fn renderWithPipeline(renderer: *Renderer, shader: Shader) void {
+    const transform = Mat4x4.identity()
+        .rotate(state.rotation)
+        .translate(state.position);
+    shader.setUniform(UniformType.MAT4, "transform", transform.data);
+    renderer.renderMesh(Vertex, state.mesh);
+}
 
 const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
@@ -155,144 +295,3 @@ const Quat = struct {
         };
     }
 };
-
-pub const State = struct {
-    running: bool,
-    mesh: Mesh(Vertex),
-    shader: Shader,
-    clearColor: Vec4,
-    position: Vec3,
-    rotation: Quat,
-
-    pub fn destroy(self: *State) void {
-        self.mesh.destroy();
-        self.shader.destroy();
-    }
-};
-
-var state = State{
-    .running = false,
-    .mesh = undefined,
-    .shader = undefined,
-    .clearColor = Vec4{ 0.0, 0.0, 0.0, 1.0 },
-    .position = Vec3{ 0.0, 0.0, 0.0 },
-    .rotation = Quat.rotationAroundZ(std.math.pi / 4.0),
-};
-
-pub fn main() !void {
-    try graphics.WindowManager.init();
-    defer graphics.WindowManager.terminate();
-
-    var window = WindowManager.createWindow(600, 480, "Hello World!", setup) catch |err| {
-        std.debug.print("Failed to create window or setup resources: {}\n", .{err});
-        return error.HelloWorldFailed;
-    };
-    defer window.close();
-    defer state.destroy();
-
-    Mat4x4.identity()
-        .rotate(state.rotation)
-        .translate(state.position)
-        .print();
-
-    state.running = true;
-    while (state.running) {
-        WindowManager.pollEvents();
-        if (window.closeRequested()) {
-            state.running = false;
-        }
-        update();
-
-        window.renderFrame(render);
-        window.swapBuffer();
-    }
-}
-
-fn setup(window: *Window, _: Renderer) !void {
-    try window.setKeyInputCallback(onKeyEvent);
-    window.enableVSync(true);
-
-    var data: [3]Vertex = [_]Vertex{
-        .{
-            .position = Vec3{ -0.5, -0.5, 0.0 },
-            .color = Vec4{ 1.0, 0.0, 0.0, 1.0 },
-        },
-        .{
-            .position = Vec3{ 0.5, -0.5, 0.0 },
-            .color = Vec4{ 0.0, 1.0, 0.0, 1.0 },
-        },
-        .{
-            .position = Vec3{ 0.0, 0.5, 0.0 },
-            .color = Vec4{ 0.0, 0.0, 1.0, 1.0 },
-        },
-    };
-    var vertexBuffer = try VertexBuffer(Vertex).create(&data);
-    errdefer vertexBuffer.destroy();
-
-    const shaderSourceRelativePath = "examples/resources/hello-world.shader";
-    const shaderSourceAbsolutePath = try std.fs.cwd().realpath(shaderSourceRelativePath, undefined);
-    state.shader = try Shader.create(shaderSourceAbsolutePath);
-    errdefer state.shader.destroy();
-
-    var indices = [_]u8{
-        0, 1, 2,
-    };
-    var indexBuffer = IndexBuffer.create(&indices);
-    errdefer indexBuffer.destroy();
-
-    state.mesh = Mesh(Vertex).create(vertexBuffer, indexBuffer);
-    errdefer state.mesh.destroy();
-}
-
-fn onKeyEvent(_: *Window, key: Key, _: KeyModifier, action: KeyAction) void {
-    const escapePressed = key == Key.ESCAPE and action == KeyAction.PRESSED;
-    if (escapePressed) {
-        state.running = false;
-    }
-
-    const speed: f32 = 0.1;
-    if (action == KeyAction.PRESSED) {
-        if (key == Key.Q) {
-            state.clearColor[0] = @min(state.clearColor[0] + 0.1, 1.0);
-        } else if (key == Key.A) {
-            state.clearColor[0] = @max(state.clearColor[0] - 0.1, 0.0);
-        } else if (key == Key.W) {
-            state.clearColor[1] = @min(state.clearColor[1] + 0.1, 1.0);
-        } else if (key == Key.S) {
-            state.clearColor[1] = @max(state.clearColor[1] - 0.1, 0.0);
-        } else if (key == Key.E) {
-            state.clearColor[2] = @min(state.clearColor[2] + 0.1, 1.0);
-        } else if (key == Key.D) {
-            state.clearColor[2] = @max(state.clearColor[2] - 0.1, 0.0);
-        } else if (key == Key.UP) {
-            state.position[1] += speed;
-        } else if (key == Key.DOWN) {
-            state.position[1] -= speed;
-        } else if (key == Key.RIGHT) {
-            state.position[0] += speed;
-        } else if (key == Key.LEFT) {
-            state.position[0] -= speed;
-        }
-    }
-}
-
-fn update() void {
-    const rotationalSpeed: f32 = std.math.pi / 120.0;
-    state.rotation = Quat.rotationAroundZ(rotationalSpeed).multiply(state.rotation);
-}
-
-fn render(window: *Window, renderer: *Renderer) void {
-    renderer.setClearColor(state.clearColor);
-    const frameSize = window.getFrameSize();
-    renderer.setViewport(0, 0, frameSize[0], frameSize[1]);
-    renderer.clear(Renderer.ClearOptions.all());
-    renderer.renderWithPipeline(state.shader, renderWithPipeline);
-}
-
-fn renderWithPipeline(renderer: *Renderer, shader: Shader) void {
-    const transform = Mat4x4.identity()
-        .rotate(state.rotation)
-        .translate(state.position);
-    shader.setUniform(UniformType.MAT4, "transform", transform.data);
-    renderer.renderMesh(Vertex, state.mesh);
-}
