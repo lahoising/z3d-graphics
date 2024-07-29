@@ -72,6 +72,18 @@ const FieldInfo = struct {
                     .type = gl.VertexAttribType.float,
                 };
             },
+            .Array => |array| {
+                if (array.child != f32) {
+                    std.debug.print("Error, only Arrays of f32 are supported\n", .{});
+                    return error.UnsupportedArrayType;
+                }
+
+                return FieldInfo{
+                    .size = array.len * @sizeOf(f32),
+                    .count = array.len,
+                    .type = gl.VertexAttribType.float,
+                };
+            },
             .Float => FieldInfo{
                 .size = @sizeOf(f32),
                 .count = 1,
