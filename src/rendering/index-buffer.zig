@@ -2,15 +2,15 @@ const zopengl = @import("zopengl");
 const gl = zopengl.wrapper;
 
 pub const IndexBuffer = struct {
-    indices: []u8,
+    indices: []u32,
     buffer: gl.Buffer,
 
-    pub fn create(indices: []u8) IndexBuffer {
+    pub fn create(indices: []u32) IndexBuffer {
         var buffer: gl.Buffer = undefined;
         gl.genBuffer(&buffer);
         gl.bindBuffer(gl.BufferTarget.element_array_buffer, buffer);
         defer gl.bindBuffer(gl.BufferTarget.element_array_buffer, gl.Buffer{ .name = 0 });
-        gl.bufferData(gl.BufferTarget.element_array_buffer, @sizeOf(u8) * indices.len, @ptrCast(indices.ptr), gl.BufferUsage.static_draw);
+        gl.bufferData(gl.BufferTarget.element_array_buffer, @sizeOf(u32) * indices.len, @ptrCast(indices.ptr), gl.BufferUsage.static_draw);
         return IndexBuffer{ .indices = indices, .buffer = buffer };
     }
 

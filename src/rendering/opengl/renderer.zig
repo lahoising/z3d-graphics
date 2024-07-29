@@ -46,6 +46,6 @@ pub const GlRenderer = struct {
         gl.bindBuffer(gl.BufferTarget.element_array_buffer, indexBuffer.buffer);
         defer gl.bindBuffer(gl.BufferTarget.element_array_buffer, gl.Buffer{ .name = 0 });
 
-        zopengl.bindings.drawElements(gl.TRIANGLES, @intCast(indexBuffer.indices.len), gl.UNSIGNED_BYTE, null);
+        zopengl.bindings.drawElements(gl.TRIANGLES, @intCast(indexBuffer.indices.len), gl.UNSIGNED_INT, null);
     }
 };

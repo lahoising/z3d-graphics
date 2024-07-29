@@ -93,7 +93,7 @@ fn setup(window: *Window) !void {
     state.shader = try Shader.create(shaderSourceAbsolutePath);
     errdefer state.shader.destroy();
 
-    var indices = [_]u8{
+    var indices = [_]u32{
         0, 1, 2,
     };
     var indexBuffer = IndexBuffer.create(&indices);
