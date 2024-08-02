@@ -19,6 +19,8 @@ pub const Shader = rendering.Shader;
 pub const Mesh = rendering.Mesh;
 pub const UniformType = rendering.UniformType;
 
+const DepthTestFn = Renderer.DepthTestFn;
+
 pub fn Z3DG(comptime renderingBackend: Renderer.Backend) type {
     return struct {
         const Self = @This();
@@ -55,6 +57,9 @@ pub fn Z3DG(comptime renderingBackend: Renderer.Backend) type {
             const allocator = std.heap.page_allocator;
             zgui.init(allocator);
             zgui.backend.init(windowHandle);
+
+            var rend = Renderer.create(renderingBackend);
+            rend.setDepthTest(DepthTestFn.LESS);
         }
 
         pub fn terminate(self: *Self) void {

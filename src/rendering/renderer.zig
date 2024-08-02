@@ -33,12 +33,23 @@ pub const Renderer = union(enum) {
         }
     };
 
+    pub const DepthTestFn = enum {
+        DISABLED,
+        LESS,
+    };
+
     pub fn create(comptime backend: Backend) Renderer {
         return switch (backend) {
             Backend.OpenGL => Renderer{
                 .glRenderer = GlRenderer.create(),
             },
         };
+    }
+
+    pub fn setDepthTest(self: *Renderer, depthTest: DepthTestFn) void {
+        switch (self.*) {
+            inline else => |*instance| instance.setDepthTest(depthTest),
+        }
     }
 
     pub fn setViewport(self: Renderer, x: i32, y: i32, width: u16, height: u16) void {

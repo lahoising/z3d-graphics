@@ -8,10 +8,21 @@ const IndexBuffer = renderer.IndexBuffer;
 const Shader = renderer.Shader;
 const RenderWithPipelineCallback = renderer.Renderer.RenderWithPipelineCallback;
 const ClearOptions = Renderer.ClearOptions;
+const DepthTestFn = Renderer.DepthTestFn;
 
 pub const GlRenderer = struct {
     pub fn create() GlRenderer {
         return GlRenderer{};
+    }
+
+    pub fn setDepthTest(_: *GlRenderer, depthTest: DepthTestFn) void {
+        switch (depthTest) {
+            DepthTestFn.DISABLED => gl.disable(gl.Capability.depth_test),
+            DepthTestFn.LESS => {
+                gl.enable(gl.Capability.depth_test);
+                gl.depthFunc(gl.Func.less);
+            },
+        }
     }
 
     pub fn setViewport(_: GlRenderer, x: i32, y: i32, width: u16, height: u16) void {
